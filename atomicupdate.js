@@ -1,26 +1,29 @@
 const AWS = require('aws-sdk');
-const dynamoDB = new AWS.DynamoDB.DocumentClient();
+const dynamodb = new AWS.DynamoDB.DocumentClient();
 
-const updateCounters = async (reportId) => {
-    const params = {
-        TableName: 'YourTableName',
-        Key: { 'ReportId': reportId },
-        UpdateExpression: 'SET successCount = if_not_exists(successCount, :start) + :inc, failureCount = if_not_exists(failureCount, :start) - :dec',
-        ExpressionAttributeValues: {
-            ':inc': 1,
-            ':dec': 1,
-            ':start': 0
-        },
-        ReturnValues: 'UPDATED_NEW'
-    };
+const updateCounters = async (tableName, reportId) => {
+  const params = {
+    TransactItems: [{
+      Update: {
+        TableName: tableName,
+        Key: { reportId: reportId },
+        UpdateExpression:
+          "SET successCount = successCount + :inc, failCount = failCount - :dec",
+        ExpressionAttributeValues: {
+          ":inc": 1,
+          ":dec": 1
+        },
+        ReturnValues: "UPDATED_NEW"
+      }
+    }]
+  };
 
-    try {
-        const result = await dynamoDB.update(params).promise();
-        console.log('Counters updated successfully:', result);
-    } catch (error) {
-        console.error('Error updating counters:', error);
-    }
+  try {
+    const result = await dynamodb.transactWrite(params).promise();
+    console.log("Transaction Successful:", result);
+    return result; // Modify this to return what you find useful
+  } catch (error) {
+    console.error("Transaction Failed:", error);
+    throw error; // Proper error handling by re-throwing it for the caller to handle
+  }
 };
-
-// Usage
-updateCounters('your-report-id');
