@@ -1,29 +1,41 @@
 const AWS = require('aws-sdk');
 const dynamodb = new AWS.DynamoDB.DocumentClient();
 
-const updateCounters = async (tableName, reportId) => {
-  const params = {
-    TransactItems: [{
-      Update: {
-        TableName: tableName,
-        Key: { reportId: reportId },
-        UpdateExpression:
-          "SET successCount = successCount + :inc, failCount = failCount - :dec",
-        ExpressionAttributeValues: {
-          ":inc": 1,
-          ":dec": 1
-        },
-        ReturnValues: "UPDATED_NEW"
-      }
-    }]
-  };
+async function updateCounters(tableName, reportId) {
+    const params = {
+        TransactItems: [{
+            Update: {
+                TableName: tableName,
+                Key: { reportId: reportId },
+                UpdateExpression: "SET successCount = successCount + :inc",
+                ExpressionAttributeValues: {
+                    ":inc": 1
+                },
+                ReturnValues: "UPDATED_NEW"
+            }
+        }]
+    };
 
-  try {
-    const result = await dynamodb.transactWrite(params).promise();
-    console.log("Transaction Successful:", result);
-    return result; // Modify this to return what you find useful
-  } catch (error) {
-    console.error("Transaction Failed:", error);
-    throw error; // Proper error handling by re-throwing it for the caller to handle
-  }
-};
+    let attempts = 0;
+    const maxAttempts = 5;
+
+    while (attempts < maxAttempts) {
+        try {
+            const result = await dynamodb.transactWrite(params).promise();
+            console.log("Transaction Successful:", result);
+            return result; // Return successful result
+        } catch (error) {
+            if (error.code === 'TransactionConflictException' && attempts < maxAttempts - 1) {
+                await delay(50 * Math.pow(2, attempts)); // Exponential backoff
+                attempts++;
+            } else {
+                console.error("Transaction failed after retries:", error);
+                throw error; // Rethrow after last attempt
+            }
+        }
+    }
+}
+
+function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
